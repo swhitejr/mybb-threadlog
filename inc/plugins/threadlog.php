@@ -29,6 +29,10 @@ function threadlog_install()
     // alter the forum table
     $db->write_query("ALTER TABLE `". $db->table_prefix ."forums` ADD `threadlog_include` TINYINT( 1 ) NOT NULL DEFAULT '0'");
 
+    // alter the thread table to include order and description
+    $db->add_column("threads", "description", "varchar(240) NOT NULL default '' AFTER subject");
+    $db->add_column("threads", "order", "mediumint NOT NULL default '9999'");
+
     // SETTINGS
 
     // make a settings group
@@ -69,46 +73,57 @@ function threadlog_install()
 
     // define the page template
     $threadlog_page = '<html>
-  <head>
-    <title>{$mybb->settings[\'bbname\']} - {$username}\'s Threadlog</title>
-    {$headerinclude}
-  </head>
-  <body>
-    {$header}
-
-    {$multipage}
-    
-        <table id="threadlog" class="tborder" border="0" cellpadding="{$theme[\'tablespace\']}" cellspacing="{$theme[\'borderwidth\']}">
-            <thead>
-                <tr>
-                    <td class="thead" colspan="4">{$username}\'s Threadlog &middot; <a href="{$mybb->settings[\'bburl\']}/member.php?action=profile&uid={$uid}">View Profile</a></td>
-                </tr>
-                <tr>
-                    <td class="tcat">Thread</td>
-                    <td class="tcat" align="center">Participants</td>
-                    <td class="tcat" align="center">Posts</td>
-                    <td class="tcat" align="right">Last Post</td>
-                </tr>
-            </thead>
-            <tbody>
-                {$threadlog_list}
-            </tbody>
-            <tfoot>
-                <tr><td class="tfoot" colspan="4" align="center">
-                <a href="#" id="active">{$count_active} active</a> &middot;
-                <a href="#" id="closed">{$count_closed} closed</a> &middot;
-                <a href="#" id="need-replies">{$count_replies} need replies</a> &middot;
-                <a href="#" id="show-all">{$count_total} total</a>
-                </td></tr>
-            </tfoot>
-        </table>
-
-    {$multipage}
-      
-    {$footer}
-    <script type="text/javascript" src="{$mybb->settings[\'bburl\']}/inc/plugins/threadlog/threadlog.js"></script>
-  </body>
-</html>';
+        <head>
+            <title>{$mybb->settings[\'bbname\']} - Threadlog</title>
+            {$headerinclude}
+        </head>
+        <body>
+            {$header}
+            <div class="Fluid">
+                <div class="Container__wrapper">
+                    <div class="Container__ProfileHeader">
+                        <div class="Container">
+                            <div class="Container__wrapper--no-padding Profile__user">
+                                <div class="Container__UserBannerAvatar">
+                                    <div class="User__banner" style="background-image: url({$user[\'fid35\']})"></div>
+                                    <div class="User__avatar">
+                                        <img src="{$user[\'avatar\']}" onerror="this.src=\'https://passingstrange.net/images/default_avatar.png\'">
+                                    </div>
+                                    <div class="User__name">
+                                        {$user[\'username\']}
+                                    </div>
+                                </div>
+                                <div class="Container__footer flexbox">
+                                    <a href="#" id="active">{$count_active} active</a> &middot;
+                                    <a href="#" id="closed">{$count_closed} closed</a> &middot;
+                                    <a href="#" id="need-replies">{$count_replies} need replies</a> &middot;
+                                    <a href="#" id="show-all">{$count_total} total</a>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    {$multipage}
+                    <table id="threadlog" class="tborder" border="0" cellpadding="{$theme[\'tablespace\']}"
+                        cellspacing="{$theme[\'borderwidth\']}" style="width:100%">
+                        <thead>
+                            <tr>
+                                <td class="tcat">Thread</td>
+                                <td class="tcat" align="center">Participants</td>
+                                <td class="tcat" align="center">Posts</td>
+                                <td class="tcat" align="right">Last Post</td>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {$threadlog_list}
+                        </tbody>
+                    </table>
+                    {$multipage}
+                </div>
+            </div>
+            {$footer}
+            <script type="text/javascript" src="{$mybb->settings[\'bburl\']}/inc/plugins/threadlog/threadlog.js"></script>
+        </body>
+    </html>';
 
     // create the page template
     $insert_array = array(
@@ -123,10 +138,20 @@ function threadlog_install()
     $db->insert_query('templates', $insert_array);
 
     // define the row template
-    $threadlog_row = '<tr class="{$thread_status}"><td class="{$thread_row}">{$thread_prefix} {$thread_title}<div class="smalltext">on {$thread_date}</small></td>
-    <td class="{$thread_row}" align="center">{$thread_participants}</td>
-    <td class="{$thread_row}" align="center"><a href="javascript:MyBB.whoPosted({$tid});">{$thread_posts}</a></td>
-    <td class="{$thread_row}" align="right">Last post by {$thread_latest_poster}<div class="smalltext">on {$thread_latest_date}</div></td></tr>';
+    $threadlog_row = '<tr class="{$thread_status}">
+        <td class="{$thread_row}">
+            {$thread_prefix} {$thread_title} 
+            <div>
+                <i>{$thread[\'description\']}</i>
+            </div>
+            <div class="smalltext">on {$thread_date}</div>
+        </td>
+        <td class="{$thread_row}" align="center">{$thread_participants}</td>
+        <td class="{$thread_row}" align="center"><a href="javascript:MyBB.whoPosted({$tid});">{$thread_posts}</a></td>
+        <td class="{$thread_row}" align="right">Last post by {$thread_latest_poster}
+            <div class="smalltext">on {$thread_latest_date}</div>
+        </td>
+    </tr>';
 
     // create the row template
     $insert_array = array(
@@ -174,6 +199,10 @@ function threadlog_uninstall()
     // delete forum option
     $db->write_query("ALTER TABLE `". $db->table_prefix ."forums` DROP `threadlog_include`;");
 
+    // delete thread table columns
+    $db->drop_column("threads", "description");
+    $db->drop_columns("threads", "order");
+
     // delete settings
     $db->delete_query('settings', "name IN ('threadlog_perpage')");
 
@@ -195,6 +224,28 @@ function threadlog_activate()
 function threadlog_deactivate()
 {
 
+}
+
+$plugins->add_hook('fetch_wol_activity_end', 'threadlog_wol');
+function threadlog_wol($user_activity) {
+    global $parameters;
+    if($parameters['action'] == "threadlog")
+    {
+        $user_activity['activity'] = "threadlog";
+        $user_activity['uidParam'] = $parameters['uid'];
+    }
+    return $user_activity;
+}
+
+$plugins->add_hook('build_friendly_wol_location_end', 'threadlog_friendly_loc');
+function threadlog_friendly_loc($array) {
+    global $parameters;
+    if($array['user_activity']['activity'] == "threadlog")
+    {
+        $uid = $array['user_activity']['uidParam'];
+        $array['location_name'] = "Viewing <a href='/misc.php?action=threadlog&uid={$uid}'>Thread Log</a>";
+    }
+    return $array;
 }
 
 // this is the main beef, right here
@@ -229,7 +280,14 @@ function threadlog()
         }
 
         // get the username and UID of current user
-        $userquery = $db->simple_select('users', 'username', 'uid = '. $uid .'');
+        $userquery = $db->write_query("SELECT * FROM `". $db->table_prefix ."users` as users LEFT JOIN `". $db->table_prefix ."userfields` as fields ON users.uid = fields.ufid where uid = " . $uid);
+
+        // Get the user object
+        $user = $db->fetch_array($userquery);
+        $user['username'] = format_name(htmlspecialchars_uni($user['username']), $user['usergroup'], $user['displaygroup']);
+
+        // make sure single quotes are replaced so we don't muck up queries
+        $username = str_replace("'", "&#39;", $user['username']);
 
         // make sure single quotes are replaced so we don't muck up queries
         $username = str_replace("'", "&#39;", $db->fetch_field($userquery, 'username'));
@@ -317,7 +375,7 @@ function threadlog()
         $count_active = $count_total - $count_closed;
 
         // final query
-        $query = $db->simple_select("threads", "tid,fid,subject,dateline,replies,lastpost,lastposter,lastposteruid,prefix,closed", "visible = 1". $tids . $forum_select ." ORDER BY `tid` DESC LIMIT ". $start .", ". $per_page);
+        $query = $db->simple_select("threads", "tid,fid,subject,description,dateline,replies,lastpost,lastposter,lastposteruid,prefix,closed", "visible = 1". $tids . $forum_select ." ORDER BY `order` DESC, `tid` DESC LIMIT ". $start .", ". $per_page);
         if($db->num_rows($query) < 1)
         {
             eval("\$threadlog_list .= \"". $templates->get("threadlog_nothreads") ."\";");
