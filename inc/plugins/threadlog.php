@@ -1,8 +1,7 @@
 <?php
 
 // Disallow direct access to this file for security reasons
-if(!defined("IN_MYBB"))
-{
+if (!defined("IN_MYBB")) {
     die("Direct initialization of this file is not allowed.");
 }
 
@@ -10,14 +9,14 @@ if(!defined("IN_MYBB"))
 function threadlog_info()
 {
     return array(
-        "name"          => "Threadlog",
-        "description"   => "Creates a threadlog for users",
-        "website"       => "http://autumnwelles.com/",
-        "author"        => "Autumn Welles",
-        "authorsite"    => "http://autumnwelles.com/",
-        "version"       => "3.0",
-        "guid"          => "",
-        "codename"      => "threadlog",
+        "name" => "Threadlog",
+        "description" => "Creates a threadlog for users",
+        "website" => "http://autumnwelles.com/",
+        "author" => "Autumn Welles",
+        "authorsite" => "http://autumnwelles.com/",
+        "version" => "3.0",
+        "guid" => "",
+        "codename" => "threadlog",
         "compatibility" => "18*"
     );
 }
@@ -27,11 +26,17 @@ function threadlog_install()
     global $db, $mybb;
 
     // alter the forum table
-    $db->write_query("ALTER TABLE `". $db->table_prefix ."forums` ADD `threadlog_include` TINYINT( 1 ) NOT NULL DEFAULT '0'");
+    $db->write_query("ALTER TABLE `" . $db->table_prefix . "forums` ADD `threadlog_include` TINYINT( 1 ) NOT NULL DEFAULT '0'");
 
-    // alter the thread table to include order and description
-    $db->add_column("threads", "description", "varchar(240) NOT NULL default '' AFTER subject");
-    $db->add_column("threads", "order", "mediumint NOT NULL default '9999'");
+    // Generate a new table to store order and description on a per user basis
+    $db->write_query("CREATE TABLE `" . $db->table_prefix . "threadlog` (
+        id INTEGER UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+        tid INTEGER NOT NULL, 
+        uid INTEGER NOT NULL, 
+        torder INTEGER DEFAULT 0,
+        description VARCHAR(140)
+    );");
+
 
     // SETTINGS
 
@@ -59,8 +64,7 @@ function threadlog_install()
     );
 
     // add the settings
-    foreach($settings_array as $name => $setting)
-    {
+    foreach ($settings_array as $name => $setting) {
         $setting['name'] = $name;
         $setting['gid'] = $gid;
         $db->insert_query('settings', $setting);
@@ -185,8 +189,9 @@ function threadlog_install()
 function threadlog_is_installed()
 {
     global $db, $mybb;
-    if($db->field_exists("threadlog_include", "forums") &&
-        isset($mybb->settings['threadlog_perpage'])) {
+    if ($db->field_exists("threadlog_include", "forums") &&
+        isset($mybb->settings['threadlog_perpage']) &&
+        $db->table_exists("threadlog")) {
         return true;
     }
     return false;
@@ -197,11 +202,10 @@ function threadlog_uninstall()
     global $db;
 
     // delete forum option
-    $db->write_query("ALTER TABLE `". $db->table_prefix ."forums` DROP `threadlog_include`;");
+    $db->write_query("ALTER TABLE `".$db->table_prefix."forums` DROP `threadlog_include`;");
 
-    // delete thread table columns
-    $db->drop_column("threads", "description");
-    $db->drop_columns("threads", "order");
+    // delete threadlog table
+    $db->write_query("DROP TABLE IF EXISTS ".$db->table_prefix."threadlog");
 
     // delete settings
     $db->delete_query('settings', "name IN ('threadlog_perpage')");
@@ -227,10 +231,10 @@ function threadlog_deactivate()
 }
 
 $plugins->add_hook('fetch_wol_activity_end', 'threadlog_wol');
-function threadlog_wol($user_activity) {
+function threadlog_wol($user_activity)
+{
     global $parameters;
-    if($parameters['action'] == "threadlog")
-    {
+    if ($parameters['action'] == "threadlog") {
         $user_activity['activity'] = "threadlog";
         $user_activity['uidParam'] = $parameters['uid'];
     }
@@ -238,10 +242,10 @@ function threadlog_wol($user_activity) {
 }
 
 $plugins->add_hook('build_friendly_wol_location_end', 'threadlog_friendly_loc');
-function threadlog_friendly_loc($array) {
+function threadlog_friendly_loc($array)
+{
     global $parameters;
-    if($array['user_activity']['activity'] == "threadlog")
-    {
+    if ($array['user_activity']['activity'] == "threadlog") {
         $uid = $array['user_activity']['uidParam'];
         $array['location_name'] = "Viewing <a href='/misc.php?action=threadlog&uid={$uid}'>Thread Log</a>";
     }
@@ -256,31 +260,25 @@ function threadlog()
     global $mybb, $templates, $theme, $lang, $header, $headerinclude, $footer, $uid, $tid;
 
     // show the threadlog when we call it
-    if($mybb->get_input('action') == 'threadlog')
-    {
+    if ($mybb->get_input('action') == 'threadlog') {
         global $mybb, $db, $templates;
 
         $templatelist = "multipage,multipage_end,multipage_jump_page,multipage_nextpage,multipage_page,multipage_page_current,multipage_page_link_current,multipage_prevpage,multipage_start";
 
         // check for a UID
-        if(isset($mybb->input['uid']))
-        {
+        if (isset($mybb->input['uid'])) {
             $uid = intval($mybb->input['uid']);
-        }
-
-        // if no UID, show logged in user
-        elseif(isset($mybb->user['uid']))
-        {
+        } // if no UID, show logged in user
+        elseif (isset($mybb->user['uid'])) {
             $uid = $mybb->user['uid'];
-        }
-
-        else
-        {
+        } else {
             exit;
         }
 
+        $editing = isset($mybb->input['edit']) && $uid == $mybb->user['uid'];
+
         // get the username and UID of current user
-        $userquery = $db->write_query("SELECT * FROM `". $db->table_prefix ."users` as users LEFT JOIN `". $db->table_prefix ."userfields` as fields ON users.uid = fields.ufid where uid = " . $uid);
+        $userquery = $db->write_query("SELECT * FROM `" . $db->table_prefix . "users` as users LEFT JOIN `" . $db->table_prefix . "userfields` as fields ON users.uid = fields.ufid where uid = " . $uid);
 
         // Get the user object
         $user = $db->fetch_array($userquery);
@@ -289,181 +287,175 @@ function threadlog()
         // make sure single quotes are replaced so we don't muck up queries
         $username = str_replace("'", "&#39;", $user['username']);
 
-        // make sure single quotes are replaced so we don't muck up queries
-        $username = str_replace("'", "&#39;", $db->fetch_field($userquery, 'username'));
-
         // add the breadcrumb
-        add_breadcrumb($username .'\'s Threadlog', "misc.php?action=threadlog");
+        add_breadcrumb($username . '\'s Threadlog', "misc.php?action=threadlog");
+        if ($editing) {
+            add_breadcrumb('Edit Threadlog', "misc.php?action=threadlog&uid=" . $user['uid'] . "&edit=1");
+        }
 
         // set up this variable, idk why?
         $threads = "";
 
         // get threads that this user participated in
-        $query = $db->simple_select("posts", "DISTINCT tid", "uid = ".$uid."");
+        $query = $db->simple_select("posts", "DISTINCT tid", "uid = " . $uid . "");
         $topics = "";
-        
+
         // build our topic list
-        while($row = $db->fetch_array($query))
-        {
-            $topics .= $row['tid'] .",";
+        while ($row = $db->fetch_array($query)) {
+            $topics .= $row['tid'] . ",";
         }
 
         // remove last comma
         $topics = substr_replace($topics, "", -1);
 
         // set up topics query
-        if(isset($topics))
-        {
-            $tids = " AND tid IN ('". str_replace(',', '\',\'', $topics) ."')";
-        }
-        else
-        {
+        if (isset($topics)) {
+            $tids = " AND tid IN ('" . str_replace(',', '\',\'', $topics) . "')";
+        } else {
             $tids = "";
         }
 
         // get the list of forums to include
         $query = $db->simple_select("forums", "fid", "threadlog_include = 1");
-        if($db->num_rows($query) < 1)
-        {
+        if ($db->num_rows($query) < 1) {
             $forum_select = " ";
-        }
-        else
-        {
+        } else {
             $i = 0;
-            while($forum = $db->fetch_array($query)) {
+            while ($forum = $db->fetch_array($query)) {
                 $i++;
                 if ($i > 1) {
-                    $fids .= ",'". $forum['fid'] ."'";
+                    $fids .= ",'" . $forum['fid'] . "'";
                 } else {
-                    $fids .= "'". $forum['fid'] ."'";
+                    $fids .= "'" . $forum['fid'] . "'";
                 }
             }
-            $forum_select = " AND fid IN(". $fids .")";
+            $forum_select = " AND fid IN(" . $fids . ")";
         }
 
         // set up the pager
-        $threadlog_url = htmlspecialchars_uni("misc.php?action=threadlog&uid=". $uid);
+        $threadlog_url = htmlspecialchars_uni("misc.php?action=threadlog&uid=" . $uid);
 
         $per_page = intval($mybb->settings['threadlog_perpage']);
 
         $page = $mybb->get_input('page', MyBB::INPUT_INT);
-        if($page && $page > 0)
-        {
+        if ($page && $page > 0) {
             $start = ($page - 1) * $per_page;
-        }
-        else
-        {
+        } else {
             $start = 0;
             $page = 1;
         }
 
         $page_total = 0;
 
-        $query = $db->simple_select("threads", "COUNT(*) AS threads", "visible = 1". $tids . $forum_select);
+        $query = $db->simple_select("threads", "COUNT(*) AS threads", "visible = 1" . $tids . $forum_select);
         $threadlog_total = $db->fetch_field($query, "threads");
         $count_total = $threadlog_total; // getting the total here, since it's convenient
 
         $multipage = multipage($threadlog_total, $per_page, $page, $threadlog_url);
 
         // get replies total
-        $query = $db->simple_select("threads", "tid", "visible = 1 AND `closed` != 1 AND `lastposteruid` != ". $uid . $tids . $forum_select);
+        $query = $db->simple_select("threads", "tid", "visible = 1 AND `closed` != 1 AND `lastposteruid` != " . $uid . $tids . $forum_select);
         $count_replies = $db->num_rows($query);
 
         // get active & closed total
-        $query = $db->simple_select("threads", "tid", "visible = 1 AND `closed` = 1". $tids . $forum_select);
+        $query = $db->simple_select("threads", "tid", "visible = 1 AND `closed` = 1" . $tids . $forum_select);
         $count_closed = $db->num_rows($query);
         $count_active = $count_total - $count_closed;
 
         // final query
-        $query = $db->simple_select("threads", "tid,fid,subject,description,dateline,replies,lastpost,lastposter,lastposteruid,prefix,closed", "visible = 1". $tids . $forum_select ." ORDER BY `order` DESC, `tid` DESC LIMIT ". $start .", ". $per_page);
-        if($db->num_rows($query) < 1)
-        {
-            eval("\$threadlog_list .= \"". $templates->get("threadlog_nothreads") ."\";");
+        $query = $db->simple_select("threads", "tid,fid,subject,description,dateline,replies,lastpost,lastposter,lastposteruid,prefix,closed,`order`", "visible = 1" . $tids . $forum_select . " ORDER BY `order` DESC, `tid` DESC LIMIT " . $start . ", " . $per_page);
+        if ($db->num_rows($query) < 1) {
+            eval("\$threadlog_list .= \"" . $templates->get("threadlog_nothreads") . "\";");
         }
-        while($thread = $db->fetch_array($query))
-        {
+        while ($thread = $db->fetch_array($query)) {
 
             $page_total++;
 
             $tid = $thread['tid'];
 
-            $posts_query = $db->simple_select("posts", "tid", "visible = 1 AND tid = '". $tid ."'");
+            $posts_query = $db->simple_select("posts", "tid", "visible = 1 AND tid = '" . $tid . "'");
             $thread_posts = $db->num_rows($posts_query);
 
             // set up row styles
-            if($page_total % 2)
-            {
+            if ($page_total % 2) {
                 $thread_row = "trow2";
-            }
-            else
-            {
+            } else {
                 $thread_row = "trow1";
             }
 
             // set up classes for active, needs reply, and closed threads
-            if($thread['closed'] == 1)
-            {
+            if ($thread['closed'] == 1) {
                 $thread_status = "closed";
-            }
-            else
-            {
+            } else {
                 $thread_status = "active";
 
                 // print($thread['lastposteruid']); print $uid; die();
 
-                if($thread['lastposteruid'] != $uid)
-                {
+                if ($thread['lastposteruid'] != $uid) {
                     $thread_status .= " needs-reply";
                 }
             }
 
             // set up thread link
-            $thread_title = "<a href=\"{$mybb->settings['bburl']}/showthread.php?tid=". $thread['tid'] ."\">". $thread['subject'] ."</a>";
+            $thread_title = "<a href=\"{$mybb->settings['bburl']}/showthread.php?tid=" . $thread['tid'] . "\">" . $thread['subject'] . "</a>";
 
             // set up thread date
             $thread_date = date($mybb->settings['dateformat'], $thread['dateline']);
 
             // set up last poster
-            $thread_latest_poster = "<a href=\"{$mybb->settings['bburl']}/member.php?action=profile&uid=". $thread['lastposteruid'] ."\">". $thread['lastposter'] ."</a>";
+            $thread_latest_poster = "<a href=\"{$mybb->settings['bburl']}/member.php?action=profile&uid=" . $thread['lastposteruid'] . "\">" . $thread['lastposter'] . "</a>";
 
             // set up date of last post
             $thread_latest_date = date($mybb->settings['dateformat'], $thread['lastpost']);
 
             // set up thread prefix
             $thread_prefix = '';
-            $query2 = $db->simple_select("threadprefixes", "displaystyle", "pid = ".$thread['prefix']);
+            $query2 = $db->simple_select("threadprefixes", "displaystyle", "pid = " . $thread['prefix']);
             $prefix = $db->fetch_array($query2);
-            if($thread['prefix'] != 0)
-            {
+            if ($thread['prefix'] != 0) {
                 $thread_prefix = $prefix['displaystyle'];
             }
 
             // set up skills/attributes, but only if it exists!
-            if($db->table_exists('usernotes')) {
+            if ($db->table_exists('usernotes')) {
                 $usernotes = '';
-                $query5 = $db->simple_select("usernotes", "*", "tid = ". $thread['tid'] ." AND uid = ".$uid);
+                $query5 = $db->simple_select("usernotes", "*", "tid = " . $thread['tid'] . " AND uid = " . $uid);
                 $usernotes = $db->fetch_array($query5);
             }
 
             // set up participants
             $thread_participants = 'N/A';
             $i = 0;
-            $query4 = $db->simple_select("posts", "DISTINCT uid, username", "tid = ". $thread['tid'] ." AND uid != '". $uid ."'");
-            while($participant = $db->fetch_array($query4)) {
+            $query4 = $db->simple_select("posts", "DISTINCT uid, username", "tid = " . $thread['tid'] . " AND uid != '" . $uid . "'");
+            while ($participant = $db->fetch_array($query4)) {
                 $i++;
-                if($i == 1) {
-                    $thread_participants = "<a href=\"{$mybb->settings['bburl']}/member.php?action=profile&uid=". $participant['uid'] ."\">". $participant['username'] ."</a>";
+                if ($i == 1) {
+                    $thread_participants = "<a href=\"{$mybb->settings['bburl']}/member.php?action=profile&uid=" . $participant['uid'] . "\">" . $participant['username'] . "</a>";
                 } else {
-                    $thread_participants .= ", <a href=\"{$mybb->settings['bburl']}/member.php?action=profile&uid=". $participant['uid'] ."\">". $participant['username'] ."</a>";
+                    $thread_participants .= ", <a href=\"{$mybb->settings['bburl']}/member.php?action=profile&uid=" . $participant['uid'] . "\">" . $participant['username'] . "</a>";
                 }
             }
 
+            // Handle edit items for each row
+            if ($editing) {
+                eval('$threadlog_row_order = "' . $templates->get("threadlog_row_order") . '";');
+                eval('$threadlog_description_input = "' . $templates->get("threadlog_description_input") . '";');
+            }
+
             // add the row to the list
-            eval("\$threadlog_list .= \"".$templates->get("threadlog_row")."\";");
+            eval("\$threadlog_list .= \"" . $templates->get("threadlog_row") . "\";");
 
         } // end while
 
-        eval("\$threadlog_page = \"".$templates->get("threadlog_page")."\";");
+        // Handle edit items for whole page
+        if ($editing) {
+            eval('$threadlog_order_header = "' . $templates->get("threadlog_order_header") . '";');
+            eval('$threadlog_save_button = "' . $templates->get("threadlog_save_button") . '";');
+        } else if ($uid == $mybb->user['uid']) {
+            eval('$threadlog_edit_link = "' . $templates->get("threadlog_edit_link") . '";');
+        }
+
+        eval("\$threadlog_page = \"" . $templates->get("threadlog_page") . "\";");
 
         output_page($threadlog_page);
 
@@ -492,13 +484,12 @@ function threadlog_formcontainer_editform()
     $query = $db->simple_select('forums', 'threadlog_include', "fid='{$fid}'", array('limit' => 1));
     $include = $db->fetch_field($query, 'threadlog_include');
 
-    if($form_container->_title == "Edit Forum")
-    {
+    if ($form_container->_title == "Edit Forum") {
         // create input fields
         $threadlog_forum_include = array(
             $form->generate_check_box("threadlog_include", 1, "Include in threadlog?", array("checked" => $include))
         );
-        $form_container->output_row("Threadlog", "", "<div class=\"group_settings_bit\">".implode("</div><div class=\"group_settings_bit\">", $threadlog_forum_include)."</div>");
+        $form_container->output_row("Threadlog", "", "<div class=\"group_settings_bit\">" . implode("</div><div class=\"group_settings_bit\">", $threadlog_forum_include) . "</div>");
     }
 }
 
