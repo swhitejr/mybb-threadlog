@@ -427,6 +427,9 @@ function threadlog()
 
         // set up the pager
         $threadlog_url = htmlspecialchars_uni("misc.php?action=threadlog&uid=" . $uid);
+        if($editing) {
+            $threadlog_url = htmlspecialchars_uni("misc.php?action=threadlog&edit=1&uid=" . $uid);
+        }
 
         $per_page = intval($mybb->settings['threadlog_perpage']);
 
