@@ -458,8 +458,8 @@ function threadlog()
         // final query
         $query = $db->simple_select("threads t
             left join ".$db->table_prefix."threadlog l on l.ltid = t.tid and l.luid = ".$uid,
-            "t.*, l.torder, l.description",
-            "visible = 1" . $tids . $forum_select . " ORDER BY l.torder DESC, t.tid DESC LIMIT " . $start . ", " . $per_page);
+            "t.*, COALESCE(l.torder, 9999) as torder, l.description",
+            "visible = 1" . $tids . $forum_select . " ORDER BY torder DESC, t.tid DESC LIMIT " . $start . ", " . $per_page);
         if ($db->num_rows($query) < 1) {
             eval("\$threadlog_list .= \"" . $templates->get("threadlog_nothreads") . "\";");
         }
