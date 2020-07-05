@@ -30,11 +30,11 @@ function threadlog_install()
 
     // Generate a new table to store order and description on a per user basis
     $db->write_query("CREATE TABLE `" . $db->table_prefix . "threadlog` (
-        id INTEGER UNSIGNED AUTO_INCREMENT PRIMARY KEY,
-        tid INTEGER NOT NULL, 
-        uid INTEGER NOT NULL, 
-        torder INTEGER DEFAULT 0,
-        description VARCHAR(140)
+        ltid INTEGER NOT NULL, 
+        luid INTEGER NOT NULL, 
+        torder INTEGER DEFAULT 9999,
+        description VARCHAR(140) DEFAULT '',
+        PRIMARY KEY (ltid, luid)
     );");
 
 
@@ -365,6 +365,9 @@ function threadlog()
             exit;
         }
 
+        // Handle Post requests
+        threadlog_post($uid);
+
         $editing = isset($mybb->input['edit']) && $uid == $mybb->user['uid'];
 
         // get the username and UID of current user
@@ -453,7 +456,10 @@ function threadlog()
         $count_active = $count_total - $count_closed;
 
         // final query
-        $query = $db->simple_select("threads", "tid,fid,subject,dateline,replies,lastpost,lastposter,lastposteruid,prefix,closed", "visible = 1" . $tids . $forum_select . " ORDER BY `order` DESC, `tid` DESC LIMIT " . $start . ", " . $per_page);
+        $query = $db->simple_select("threads t
+            left join ".$db->table_prefix."threadlog l on l.ltid = t.tid and l.luid = ".$uid,
+            "t.*, l.torder, l.description",
+            "visible = 1" . $tids . $forum_select . " ORDER BY l.torder DESC, t.tid DESC LIMIT " . $start . ", " . $per_page);
         if ($db->num_rows($query) < 1) {
             eval("\$threadlog_list .= \"" . $templates->get("threadlog_nothreads") . "\";");
         }
@@ -550,8 +556,44 @@ function threadlog()
         output_page($threadlog_page);
 
         exit;
-
     } // end threadlog action
+}
+
+function threadlog_post($uid) {
+    global $mybb, $db;
+
+
+    if($uid != $mybb->user['uid'] || $mybb->request_method != 'post') {
+        return;
+    }
+    $torders = $mybb->input['torder'];
+    $descriptions = $mybb->input['description'];
+
+    foreach ($torders as $tid => $order)
+    {
+        $description = ($descriptions[$tid]);
+        $description = str_replace('"', "&quot;", $description);
+        if (is_integer((int) $order) && strlen($description) <= 140) {
+            $query = $db->simple_select('threadlog', '*', 'ltid = ' . $tid . ' AND luid = ' . $uid);
+            if ($query->num_rows) {
+                $db->update_query('threadlog',
+                    array('torder' => (int) $order,
+                        'description' => $db->escape_string($description)),
+                    'ltid = ' . $tid . ' AND luid = ' . $uid);
+            }
+            else {
+                $db->insert_query('threadlog',
+                    array('ltid' => (int) $tid,
+                        'luid' => (int) $uid,
+                        'torder' => (int) $order,
+                        'description' => $db->escape_string($description)));
+            }
+        }
+    }
+
+    // Send user back to threadlog
+    header("Location: misc.php?action=threadlog&uid".$uid);
+    die();
 }
 
 // add field to ACP
