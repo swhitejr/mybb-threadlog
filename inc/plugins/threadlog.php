@@ -107,20 +107,26 @@ function threadlog_install()
                         </div>
                     </div>
                     {$multipage}
-                    <table id="threadlog" class="tborder" border="0" cellpadding="{$theme[\'tablespace\']}"
-                        cellspacing="{$theme[\'borderwidth\']}" style="width:100%">
-                        <thead>
-                            <tr>
-                                <td class="tcat">Thread</td>
-                                <td class="tcat" align="center">Participants</td>
-                                <td class="tcat" align="center">Posts</td>
-                                <td class="tcat" align="right">Last Post</td>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            {$threadlog_list}
-                        </tbody>
-                    </table>
+					<form method="POST" action="/misc.php?action=threadlog">
+						<table id="threadlog" class="tborder" border="0" cellpadding="{$theme[\'tablespace\']}"
+							cellspacing="{$theme[\'borderwidth\']}" style="width:100%">
+							<thead>
+								<tr>
+									{$threadlog_order_header}
+									<td class="tcat">Thread</td>
+									<td class="tcat" align="center">Participants</td>
+									<td class="tcat" align="center">Posts</td>
+									<td class="tcat" align="right">Last Post</td>
+								</tr>
+							</thead>
+							<tbody>
+								{$threadlog_list}
+							</tbody>
+						</table>
+						<div class="Container" style="text-align:center; margin-top:10px;">
+							{$threadlog_save_button}
+						</div>
+					</form>
                     {$multipage}
                 </div>
             </div>
@@ -169,10 +175,10 @@ function threadlog_install()
     // insert the list row into DB
     $db->insert_query('templates', $insert_array);
 
-    // define the row template
+    // define the no threads row template
     $threadlog_nothreads = "<tr><td colspan='4'>No threads to speak of.</td></tr>";
 
-    // create the row template
+    // create the no threads row template
     $insert_array = array(
         'title' => 'threadlog_nothreads',
         'template' => $db->escape_string($threadlog_nothreads),
@@ -181,9 +187,93 @@ function threadlog_install()
         'dateline' => time(),
     );
 
-    // insert the list row into DB
+    // insert the no threads row into DB
     $db->insert_query('templates', $insert_array);
 
+    // Row Ordering template
+    $threadlog_row_order = '<td class="{$thread_row}">
+        <input type="text" size="1" name="torder[{$thread[\'tid\']}]" value="{$thread[\'torder\']}" />
+    </td>';
+
+    // Create row orderign template
+    $insert_array = array(
+        'title' => 'threadlog_row_order',
+        'template' => $db->escape_string($threadlog_row_order),
+        'sid' => '-1',
+        'version' => '',
+        'dateline' => time(),
+    );
+
+    // Insert row ordering template
+    $db->insert_query('templates', $insert_array);
+
+    // Save button template
+    $threadlog_save_button = '<input type="submit" value="Save Threads" class="button" />';
+
+    // Create save button template
+    $insert_array = array(
+        'title' => 'threadlog_save_button',
+        'template' => $db->escape_string($threadlog_save_button),
+        'sid' => '-1',
+        'version' => '',
+        'dateline' => time(),
+    );
+
+    // Insert save button template
+    $db->insert_query('templates', $insert_array);
+
+    // Order Header template
+    $threadlog_save_button = '<td class="tcat" align="center">Order</td>';
+
+    // Create Order Header template
+    $insert_array = array(
+        'title' => 'threadlog_order_header',
+        'template' => $db->escape_string($threadlog_save_button),
+        'sid' => '-1',
+        'version' => '',
+        'dateline' => time(),
+    );
+
+    // Insert Order Header template
+    $db->insert_query('templates', $insert_array);
+
+    // Description Input template
+    $threadlog_description_input = '<tr>
+        <td colspan="5" class="{$thread_row}">
+            <input type="text" 
+                   name="description[{$thread[\'tid\']}]" 
+                   value="{$thread[\'description\']}"
+                   placeholder="Description"
+                   style="width: 100%"/>
+        </td>
+    </tr>';
+
+    // Create Description Input template
+    $insert_array = array(
+        'title' => 'threadlog_order_header',
+        'template' => $db->escape_string($threadlog_description_input),
+        'sid' => '-1',
+        'version' => '',
+        'dateline' => time(),
+    );
+
+    // Insert Description Input template
+    $db->insert_query('templates', $insert_array);
+
+    // Edit Link template
+    $threadlog_edit_link = '<a href="/misc.php?action=threadlog&edit=1">Edit Threadlog</a> &middot;';
+
+    // Create Edit Link template
+    $insert_array = array(
+        'title' => 'threadlog_order_header',
+        'template' => $db->escape_string($threadlog_edit_link),
+        'sid' => '-1',
+        'version' => '',
+        'dateline' => time(),
+    );
+
+    // Insert Edit Link template
+    $db->insert_query('templates', $insert_array);
 }
 
 function threadlog_is_installed()
@@ -202,10 +292,10 @@ function threadlog_uninstall()
     global $db;
 
     // delete forum option
-    $db->write_query("ALTER TABLE `".$db->table_prefix."forums` DROP `threadlog_include`;");
+    $db->write_query("ALTER TABLE `" . $db->table_prefix . "forums` DROP `threadlog_include`;");
 
     // delete threadlog table
-    $db->write_query("DROP TABLE IF EXISTS ".$db->table_prefix."threadlog");
+    $db->write_query("DROP TABLE IF EXISTS " . $db->table_prefix . "threadlog");
 
     // delete settings
     $db->delete_query('settings', "name IN ('threadlog_perpage')");
@@ -363,7 +453,7 @@ function threadlog()
         $count_active = $count_total - $count_closed;
 
         // final query
-        $query = $db->simple_select("threads", "tid,fid,subject,description,dateline,replies,lastpost,lastposter,lastposteruid,prefix,closed,`order`", "visible = 1" . $tids . $forum_select . " ORDER BY `order` DESC, `tid` DESC LIMIT " . $start . ", " . $per_page);
+        $query = $db->simple_select("threads", "tid,fid,subject,dateline,replies,lastpost,lastposter,lastposteruid,prefix,closed", "visible = 1" . $tids . $forum_select . " ORDER BY `order` DESC, `tid` DESC LIMIT " . $start . ", " . $per_page);
         if ($db->num_rows($query) < 1) {
             eval("\$threadlog_list .= \"" . $templates->get("threadlog_nothreads") . "\";");
         }
