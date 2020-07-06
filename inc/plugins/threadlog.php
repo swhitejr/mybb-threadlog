@@ -576,7 +576,7 @@ function threadlog_post($uid) {
     {
         $description = ($descriptions[$tid]);
         $description = str_replace('"', "&quot;", $description);
-        if (is_integer((int) $order) && strlen($description) <= 140) {
+        if (is_integer((int) $order) && strlen($description) <= 1000) {
             $query = $db->simple_select('threadlog', '*', 'ltid = ' . $tid . ' AND luid = ' . $uid);
             if ($query->num_rows) {
                 $db->update_query('threadlog',
