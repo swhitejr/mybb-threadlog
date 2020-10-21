@@ -33,6 +33,7 @@ function threadlog_install()
         ltid INTEGER NOT NULL, 
         luid INTEGER NOT NULL, 
         torder INTEGER DEFAULT 9999,
+        thidden BOOLEAN DEFAULT FALSE,
         description VARCHAR(140) DEFAULT '',
         PRIMARY KEY (ltid, luid)
     );");
@@ -238,7 +239,7 @@ function threadlog_install()
     $db->insert_query('templates', $insert_array);
 
     // Description Input template
-    $threadlog_description_input = '<tr>
+    $threadlog_description_input = '<tr class="{$thread_status}">
         <td colspan="5" class="{$thread_row}">
             <input type="text" 
                    name="description[{$thread[\'tid\']}]" 
@@ -427,7 +428,7 @@ function threadlog()
 
         // set up the pager
         $threadlog_url = htmlspecialchars_uni("misc.php?action=threadlog&uid=" . $uid);
-        if($editing) {
+        if ($editing) {
             $threadlog_url = htmlspecialchars_uni("misc.php?action=threadlog&edit=1&uid=" . $uid);
         }
 
@@ -460,8 +461,8 @@ function threadlog()
 
         // final query
         $query = $db->simple_select("threads t
-            left join ".$db->table_prefix."threadlog l on l.ltid = t.tid and l.luid = ".$uid,
-            "t.*, COALESCE(l.torder, 9999) as torder, l.description",
+            left join " . $db->table_prefix . "threadlog l on l.ltid = t.tid and l.luid = " . $uid,
+            "t.*, COALESCE(l.torder, 9999) as torder, l.description, l.thidden",
             "visible = 1" . $tids . $forum_select . " ORDER BY torder DESC, t.tid DESC LIMIT " . $start . ", " . $per_page);
         if ($db->num_rows($query) < 1) {
             eval("\$threadlog_list .= \"" . $templates->get("threadlog_nothreads") . "\";");
@@ -482,13 +483,25 @@ function threadlog()
                 $thread_row = "trow1";
             }
 
-            // set up classes for active, needs reply, and closed threads
-            if ($thread['closed'] == 1) {
+            // set up classes for active, needs reply, closed and hidden threads
+            if ($thread['thidden'] & !$editing) {
+                // if a thread is hidden, don't show it ever
+                $thread_status = "thidden";
+
+                // Also determine if it needs to be removed from counts
+                $count_total--;
+                if ($thread['closed'] == 1) {
+                    $count_closed--;
+                } else {
+                    $count_active--;
+                    if ($thread['lastposteruid'] != $uid) {
+                        $count_replies--;
+                    }
+                }
+            } else if ($thread['closed'] == 1) {
                 $thread_status = "closed";
             } else {
                 $thread_status = "active";
-
-                // print($thread['lastposteruid']); print $uid; die();
 
                 if ($thread['lastposteruid'] != $uid) {
                     $thread_status .= " needs-reply";
@@ -562,40 +575,43 @@ function threadlog()
     } // end threadlog action
 }
 
-function threadlog_post($uid) {
+function threadlog_post($uid)
+{
     global $mybb, $db;
 
 
-    if($uid != $mybb->user['uid'] || $mybb->request_method != 'post') {
+    if ($uid != $mybb->user['uid'] || $mybb->request_method != 'post') {
         return;
     }
     $torders = $mybb->input['torder'];
     $descriptions = $mybb->input['description'];
+    $hiddens = $mybb->input['thidden'];
 
-    foreach ($torders as $tid => $order)
-    {
+    foreach ($torders as $tid => $order) {
         $description = ($descriptions[$tid]);
+        $hidden = ($hiddens[$tid]);
         $description = str_replace('"', "&quot;", $description);
-        if (is_integer((int) $order) && strlen($description) <= 1000) {
+        if (is_integer((int)$order) && strlen($description) <= 1000) {
             $query = $db->simple_select('threadlog', '*', 'ltid = ' . $tid . ' AND luid = ' . $uid);
             if ($query->num_rows) {
                 $db->update_query('threadlog',
-                    array('torder' => (int) $order,
-                        'description' => $db->escape_string($description)),
+                    array('torder' => (int)$order,
+                        'description' => $db->escape_string($description),
+                        'thidden' => (bool)$hidden),
                     'ltid = ' . $tid . ' AND luid = ' . $uid);
-            }
-            else {
+            } else {
                 $db->insert_query('threadlog',
-                    array('ltid' => (int) $tid,
-                        'luid' => (int) $uid,
-                        'torder' => (int) $order,
-                        'description' => $db->escape_string($description)));
+                    array('ltid' => (int)$tid,
+                        'luid' => (int)$uid,
+                        'torder' => (int)$order,
+                        'description' => $db->escape_string($description),
+                        'thidden' => (bool)$hidden));
             }
         }
     }
 
     // Send user back to threadlog
-    header("Location: misc.php?action=threadlog&uid".$uid);
+    header("Location: misc.php?action=threadlog&uid" . $uid);
     die();
 }
 

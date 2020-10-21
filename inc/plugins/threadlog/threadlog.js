@@ -27,7 +27,7 @@ jQuery(document).ready(function ($) {
 
 	$('#show-all').on('click', function(e) {
 		e.preventDefault();
-		$('#threadlog tbody tr').show();
+		$('#threadlog tbody tr:not(.thidden)').show();
 	});
 
 });
