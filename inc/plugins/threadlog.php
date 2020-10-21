@@ -245,7 +245,22 @@ function threadlog_install()
                    name="description[{$thread[\'tid\']}]" 
                    value="{$thread[\'description\']}"
                    placeholder="Description"
-                   style="width: 100%"/>
+                   style="width: 99%"/>
+        </td>
+    </tr>
+    <tr class="{$thread_status}">
+        <td colspan="5" class="{$thread_row}">
+            <if $thread[\'thidden\'] then>
+                <input type="checkbox"
+                       name="thidden[{$thread[\'tid\']}]"
+                       checked
+                       />
+            <else>
+                <input type="checkbox"
+                       name="thidden[{$thread[\'tid\']}]"
+                       />
+            </if>
+            <label for="thidden[{$thread[\'tid\']}]">Hide "{$thread_title}" from threadlog?</label>
         </td>
     </tr>';
 
